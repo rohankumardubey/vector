@@ -24,7 +24,7 @@ ARG SANCOV_RUSTFLAGS
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --no-default-features \
-      --features "sources-http_server,sinks-http,sources-internal_metrics,sinks-prometheus,sources-demo_logs,sources-vector,sinks-vector,antithesis" \
+      --features "sources-http_server,sinks-http,sources-internal_metrics,sinks-prometheus,sources-demo_logs,sources-vector,sinks-vector,antithesis-scenario-disk" \
       --bin vector \
       --config 'build.target = "x86_64-unknown-linux-gnu"' \
       --config 'profile.release.debug = true' \
@@ -39,8 +39,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 ##################################
 # Harness (workload) — build stage
 ##################################
-# The scenario crate is a member of Vector's workspace, so the build needs the
-# workspace root and member manifests. `-p` compiles only the scenario's bins.
+# The workload binaries live in the shared `harness` crate, a member of Vector's
+# workspace, so the build needs the workspace root and member manifests. `-p`
+# compiles only the harness bins.
 FROM rust:1.92-bookworm AS workload-build
 RUN apt-get update && apt-get install -y --no-install-recommends binutils \
     && rm -rf /var/lib/apt/lists/*
@@ -58,7 +59,7 @@ ARG SANCOV_RUSTFLAGS
 # that it is a workspace member).
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release -p vector-to-vector-e2e-disk \
+    cargo build --release -p harness \
       --config 'build.target = "x86_64-unknown-linux-gnu"' \
       --config 'profile.release.debug = true' \
       --config "target.x86_64-unknown-linux-gnu.rustflags = ${SANCOV_RUSTFLAGS}" \
@@ -76,15 +77,9 @@ FROM debian:stable-slim AS vector
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=vector-build /usr/local/bin/vector /usr/bin/vector
-# Bake the node configs (compose picks one per node via --config) plus head's
-# benign alternate, which the reload fault swaps in to force a sink rebuild.
+# Bake the node configs; compose picks one per node via --config.
 COPY tests/antithesis/scenarios/vector_to_vector_e2e_disk/head.yaml /etc/vector/head.yaml
-COPY tests/antithesis/scenarios/vector_to_vector_e2e_disk/head.b.yaml /etc/vector/head.b.yaml
 COPY tests/antithesis/scenarios/vector_to_vector_e2e_disk/tail.yaml /etc/vector/tail.yaml
-# The reload fault is an anytime_ test command that runs IN the node container.
-# It is a no-op on tail (no VECTOR_CONFIG_ALT). The node stays running because
-# its entrypoint is Vector, not a test command.
-COPY --chmod=755 tests/antithesis/scenarios/vector_to_vector_e2e_disk/anytime_reload.sh /opt/antithesis/test/v1/v2v/anytime_reload
 RUN mkdir -p /var/lib/vector /symbols && ln -s /usr/bin/vector /symbols/vector
 ENV NO_COLOR=1
 EXPOSE 6000 8080 9598

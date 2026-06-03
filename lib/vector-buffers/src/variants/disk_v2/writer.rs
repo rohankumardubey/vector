@@ -634,7 +634,7 @@ where
         // never grows past its limit and a record never spans two files. A size
         // counter that drifted past the limit here means the gate was fed a wrong
         // on-disk size and a record was written across the boundary.
-        #[cfg(feature = "antithesis")]
+        #[cfg(feature = "antithesis-disk-asserts")]
         {
             #![allow(clippy::disallowed_types)] // once_cell::Lazy
             antithesis_sdk::assert_always_or_unreachable!(
@@ -1040,7 +1040,7 @@ where
 
             // The writer is now blocked on a full buffer, the precondition for the
             // backpressure path and for the underflow that can wedge it forever.
-            #[cfg(feature = "antithesis")]
+            #[cfg(feature = "antithesis-disk-asserts")]
             {
                 #![allow(clippy::disallowed_types)] // once_cell::Lazy
                 antithesis_sdk::assert_sometimes!(
@@ -1177,7 +1177,7 @@ where
 
                     // The writer just rolled to a fresh data file, the boundary the
                     // crash, partial-write, and file-id-rollover faults act on.
-                    #[cfg(feature = "antithesis")]
+                    #[cfg(feature = "antithesis-disk-asserts")]
                     {
                         #![allow(clippy::disallowed_types)] // once_cell::Lazy
                         antithesis_sdk::assert_sometimes!(
@@ -1316,7 +1316,7 @@ where
         // A record at or above the write-buffer size forces the buffered writer to
         // flush mid-record, exercising the large-record path that splits a single
         // record across multiple underlying writes.
-        #[cfg(feature = "antithesis")]
+        #[cfg(feature = "antithesis-disk-asserts")]
         {
             #![allow(clippy::disallowed_types)] // once_cell::Lazy
             antithesis_sdk::assert_sometimes!(

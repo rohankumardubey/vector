@@ -483,7 +483,7 @@ where
                     // advance past the last acked id, which crashes the process and
                     // can wedge it in a restart loop. The assertion files the state
                     // before the panic discards it.
-                    #[cfg(feature = "antithesis")]
+                    #[cfg(feature = "antithesis-disk-asserts")]
                     {
                         #![allow(clippy::disallowed_types)] // once_cell::Lazy
                         antithesis_sdk::assert_unreachable!(
@@ -538,7 +538,7 @@ where
             |bytes_read| {
                 // A file shorter than bytes_read makes the delta below underflow
                 // and feed a wrapped value into decrement_total_buffer_size.
-                #[cfg(feature = "antithesis")]
+                #[cfg(feature = "antithesis-disk-asserts")]
                 {
                     #![allow(clippy::disallowed_types)] // once_cell::Lazy
                     antithesis_sdk::assert_always_greater_than_or_equal_to!(
@@ -1065,7 +1065,7 @@ where
                         // The reader hit a corrupted, torn, or partially-written
                         // record and is abandoning the rest of this file, the
                         // recovery path that drives the skip-accounting hazards.
-                        #[cfg(feature = "antithesis")]
+                        #[cfg(feature = "antithesis-disk-asserts")]
                         {
                             #![allow(clippy::disallowed_types)] // once_cell::Lazy
                             antithesis_sdk::assert_sometimes!(
@@ -1153,7 +1153,7 @@ where
         // byte count is the eight-byte length delimiter plus the validated payload.
         // A delivered record whose consumed span is at most the bare delimiter means
         // a corrupted or empty record slipped past validation.
-        #[cfg(feature = "antithesis")]
+        #[cfg(feature = "antithesis-disk-asserts")]
         {
             #![allow(clippy::disallowed_types)] // once_cell::Lazy
             antithesis_sdk::assert_always_or_unreachable!(

@@ -1,11 +1,11 @@
-//! oracle: the conservation judge. Mints unique ids, records which head acked,
-//! and checks they all come back from tail — an acked id that never returns is
-//! loss.
+//! oracle: the conservation judge. Mints unique ids, records which ids the
+//! pipeline acked, and checks they all come back — an acked id that never
+//! returns is loss.
 //!
 //! Endpoints:
 //!   POST /claim          -> one fresh id (body is the id)
-//!   POST /acked          -> newline-separated ids head acked (must come back)
-//!   POST /ingest         -> tail's http sink delivers the round trip here
+//!   POST /acked          -> newline-separated ids the pipeline acked (must come back)
+//!   POST /ingest         -> the pipeline's egress sink delivers the round trip here
 //!   GET  /report         -> JSON: issued/acked/delivered/delivered_total/missing/spurious/corrupted
 //!   GET  /delivered?id=X -> "1" if returned, else "0"
 //!
@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use antithesis_sdk::{antithesis_init, assert_always, assert_reachable, lifecycle};
-use axum::extract::{RawQuery, State};
+use axum::extract::{DefaultBodyLimit, RawQuery, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Router;
@@ -41,6 +41,10 @@ struct Args {
     metrics_url: String,
     #[arg(long, env = "ORACLE_ADDR", default_value = "0.0.0.0:8686")]
     addr: SocketAddr,
+    /// Names the scenario in the `setup_complete` lifecycle event so a run records
+    /// which topology it exercised.
+    #[arg(long, env = "SCENARIO_NAME", default_value = "vector_e2e")]
+    scenario: String,
 }
 
 /// The oracle's three id sets, the raw delivery count (distinct + duplicates),
@@ -154,7 +158,7 @@ async fn ingest(State(st): State<Arc<AppState>>, body: String) -> StatusCode {
         }
     }
     if st.first_delivery.swap(false, Ordering::SeqCst) {
-        assert_reachable!("event delivered end-to-end through disk buffer");
+        assert_reachable!("event delivered end-to-end");
     }
     StatusCode::OK
 }
@@ -225,14 +229,13 @@ async fn main() {
         .route("/ingest", post(ingest))
         .route("/report", get(report))
         .route("/delivered", get(delivered))
+        .layer(DefaultBodyLimit::disable())
         .with_state(state);
 
     wait_for_vector(&args.metrics_url, time::Duration::from_secs(180)).await;
-    lifecycle::setup_complete(&json!({ "component": "vector_to_vector_e2e_disk" }));
-    assert_reachable!("oracle started");
 
-    axum::Server::bind(&args.addr)
-        .serve(app.into_make_service())
-        .await
-        .expect("oracle server failed");
+    let server = axum::Server::bind(&args.addr).serve(app.into_make_service());
+    lifecycle::setup_complete(&json!({ "component": args.scenario }));
+    assert_reachable!("oracle started");
+    server.await.expect("oracle server failed");
 }

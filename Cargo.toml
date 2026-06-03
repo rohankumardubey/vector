@@ -133,7 +133,6 @@ members = [
   "lib/vector-vrl/tests",
   "lib/vector-vrl/web-playground",
   "tests/antithesis/harness",
-  "tests/antithesis/scenarios/vector_to_vector_e2e_disk",
   "vdev",
 ]
 
@@ -365,6 +364,7 @@ hex = { version = "0.4.3", default-features = false, optional = true }
 greptimedb-ingester = { version = "0.17.0", default-features = false, optional = true }
 
 # External libs
+antithesis-instrumentation = { workspace = true, optional = true }
 arc-swap = { workspace = true, default-features = false, optional = true }
 async-compression = { version = "0.4.27", default-features = false, features = ["tokio", "gzip", "zstd"], optional = true }
 arrow = { version = "56.2.0", default-features = false, features = ["ipc"], optional = true }
@@ -533,8 +533,8 @@ ntapi = { git = "https://github.com/MSxDOS/ntapi.git", rev = "24fc1e47677fc9f6e3
 # table below). Local dev builds skip it so they don't need `libsasl2-dev` / cyrus-sasl
 # installed, and so rdkafka's build script doesn't link GSSAPI.
 default = ["enable-unix"]
-# Antithesis coverage instrumentation.
-antithesis = ["vector-lib/antithesis"]
+antithesis-scenario-memory = ["dep:antithesis-instrumentation"]
+antithesis-scenario-disk = ["dep:antithesis-instrumentation", "vector-lib/antithesis-disk-asserts"]
 # Default features for `cargo docs`. We're not using `gssapi` which would require installing libsasl2 in our doc environment.
 docs = ["enable-unix"]
 # Default features for *-unknown-linux-* which make use of `cmake` for dependencies

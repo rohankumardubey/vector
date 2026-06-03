@@ -28,34 +28,35 @@ Agent behavior will be governed by the following dictums:
 
 # Submitting a Shot
 
-Each scenario owns a `launch.sh` that pins its webhook, config directory, and
-fault profile. Launch through it, never by hand-typing `snouty launch`, so every
+One shared `scenarios/launch.sh` launches every scenario. The per-scenario bits
+live in that scenario's `launch.env` (test name, description, and the SUT node
+list to fault). Launch through it, never by hand-typing `snouty launch`, so every
 shot is identical and comparable and no fault flag is ever fumbled or forgotten.
-The fault profile in the script is the single source of truth: change a shot's
-faults by editing the script, not by passing one-off flags.
-
-For the `vector_to_vector_e2e_disk` scenario:
+The fault profile is the single source of truth: change a shot's faults by editing
+`launch.env`'s node list, not by passing one-off flags.
 
 ```sh
-cd tests/antithesis/scenarios/vector_to_vector_e2e_disk
-./launch.sh                       # 30-minute run with the pinned profile
-DURATION=60 ./launch.sh           # override duration (minutes)
-DRY_RUN=1 ./launch.sh             # print the exact command, submit nothing
+cd tests/antithesis/scenarios
+./launch.sh vector_to_vector_e2e_disk          # 30-minute run with the pinned profile
+DURATION=60 ./launch.sh vector_to_vector_e2e_disk   # override duration (minutes)
+DRY_RUN=1 ./launch.sh vector_to_vector_e2e_disk     # print the exact command, submit nothing
 ```
 
-The script reads tenant and registry from the environment (snouty's variables):
+The launcher reads tenant and registry from the environment (snouty's variables):
 
 - `ANTITHESIS_TENANT`
 - `ANTITHESIS_API_KEY` (or `ANTITHESIS_USERNAME` + `ANTITHESIS_PASSWORD`)
 - `ANTITHESIS_REPOSITORY`
 
-`DESCRIPTION` and `TEST_NAME` are overridable; the running git commit is stamped
-into the description automatically so a shot records the code it tested. Extra
-snouty flags pass straight through, e.g. `./launch.sh --recipients you@example.com`.
+`DESCRIPTION`, `TEST_NAME`, `FAULT_NODES`, and `WEBHOOK` are overridable; the
+running git commit is stamped into the description automatically so a shot records
+the code it tested. Extra snouty flags pass straight through, e.g.
+`./launch.sh vector_to_vector_e2e_disk --recipients you@example.com`.
 
-That scenario's pinned profile submits to the `persistent_storage` webhook and
-faults `head` and `tail` (the SUT) with node termination, hang, and throttle, plus
-`cpu_mod` and `clock_jitter`. The `oracle` is left out of termination and hang
-**only** — its obligation ledger lives in memory, so killing or freezing it would
-erase the run's source of truth. It is deliberately still subject to network
-faults so the `tail` → `oracle` delivery path is exercised.
+The pinned profile submits to the `persistent_storage` webhook and faults the
+scenario's SUT nodes (`head` and `tail` for the disk scenario) with node
+termination, hang, and throttle, plus `cpu_mod` and `clock_jitter`. The `oracle`
+is left out of termination and hang **only** — its obligation ledger lives in
+memory, so killing or freezing it would erase the run's source of truth. It is
+deliberately still subject to network faults so the egress delivery path is
+exercised.

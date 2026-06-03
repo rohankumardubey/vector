@@ -34,12 +34,12 @@ vector-config = { path = "../vector-config", default-features = false }
 vector-common = { path = "../vector-common", default-features = false, features = ["byte_size_of"] }
 dashmap.workspace = true
 ordered-float.workspace = true
-antithesis-instrumentation = { workspace = true, optional = true }
 antithesis_sdk = { workspace = true, optional = true, features = ["full"] }
 serde_json = { workspace = true, optional = true }
 
 [features]
-antithesis = ["dep:antithesis-instrumentation", "dep:antithesis_sdk", "dep:serde_json"]
+antithesis-disk-asserts = ["dep:antithesis_sdk", "dep:serde_json"]
+test-util = []
 
 [dev-dependencies]
 clap.workspace = true

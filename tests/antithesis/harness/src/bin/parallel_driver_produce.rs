@@ -1,4 +1,4 @@
-//! Drive one logical event into head under fault injection.
+//! Drive one logical event into the pipeline source under fault injection.
 //!
 //! On a 2xx we relay an ack-back so the oracle expects the id to come back
 //! out. If we give up before any 2xx, the id was never acked, so it is no
@@ -8,7 +8,7 @@
 
 extern crate antithesis_instrumentation;
 
-use antithesis_sdk::{antithesis_init, assert_reachable};
+use antithesis_sdk::{antithesis_init, assert_reachable, assert_unreachable};
 use clap::Parser;
 use harness::payload_field;
 use serde_json::json;
@@ -24,8 +24,8 @@ struct Args {
     oracle_url: String,
 }
 
-/// POST one event to head. Ok(2xx) means head took durable responsibility for the
-/// event (with e2e acks enabled).
+/// POST one event to the source. Ok(2xx) means the pipeline took end-to-end
+/// responsibility for the event (with e2e acks enabled).
 async fn post_event(
     client: &reqwest::Client,
     source_url: &str,
@@ -52,14 +52,18 @@ async fn claim(client: &reqwest::Client, oracle_url: &str) -> Option<u64> {
     resp.text().await.ok()?.trim().parse().ok()
 }
 
-/// Tell the oracle head acked this id, so it must come back.
-async fn report_acked(client: &reqwest::Client, oracle_url: &str, id: u64) {
-    let _ = client
-        .post(format!("{oracle_url}/acked"))
-        .timeout(time::Duration::from_secs(10))
-        .body(id.to_string())
-        .send()
-        .await;
+/// Tell the oracle the pipeline acked this id, so it must come back. Returns
+/// whether the oracle recorded the obligation.
+async fn report_acked(client: &reqwest::Client, oracle_url: &str, id: u64) -> bool {
+    matches!(
+        client
+            .post(format!("{oracle_url}/acked"))
+            .timeout(time::Duration::from_secs(10))
+            .body(id.to_string())
+            .send()
+            .await,
+        Ok(resp) if resp.status().is_success()
+    )
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -72,11 +76,23 @@ async fn main() {
         return; // oracle unreachable; nothing to do this invocation
     };
     for _ in 0..MAX_ATTEMPTS {
-        // Tight timeout. A head wedged by the underflow blocks forever, so we stop
-        // waiting and retry the same id.
+        // Tight timeout. A wedged source blocks forever, so we stop waiting and
+        // retry the same id.
         if post_event(&client, &args.source_url, id, time::Duration::from_secs(5)).await {
-            report_acked(&client, &args.oracle_url, id).await;
-            assert_reachable!("produce driver got an end-to-end ack", &json!({ "id": id }));
+            // The pipeline took end-to-end responsibility, so the oracle must record the
+            // obligation or a later loss of this id goes uncounted. /acked is a
+            // loopback call to the oracle, which is never killed, frozen, or
+            // network-faulted, so a failure here is anomalous: fail loudly rather
+            // than leave an acked id the oracle never expects. The id is dropped;
+            // the next invocation claims a fresh one.
+            if report_acked(&client, &args.oracle_url, id).await {
+                assert_reachable!("produce driver got an end-to-end ack", &json!({ "id": id }));
+            } else {
+                assert_unreachable!(
+                    "the pipeline acked an id but the oracle did not record the obligation",
+                    &json!({ "id": id })
+                );
+            }
             return;
         }
         time::sleep(time::Duration::from_millis(100)).await;

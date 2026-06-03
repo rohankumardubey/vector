@@ -127,14 +127,15 @@ async fn main() {
     let oracle_url = args.oracle_url;
     let metrics_urls = args.metrics_urls;
 
-    // Antithesis kills the producers and stops all fault injection the moment this
-    // `eventually_` command starts, so the cluster is now load-free and fault-free.
-    // That lets us judge directly instead of guessing when the system is quiet:
-    // recover, drain, then assert unconditionally. Nothing is in flight once delivery
-    // has plateaued, so any shortfall is real loss, never lag.
+    // This is an Antithesis `eventually_` command. When it starts Antithesis stops all
+    // fault injection across every container and kills the producers, then nothing new
+    // starts. So for the rest of this program the cluster is load-free and fault-free:
+    // no partitions, drops, or latency faults to tolerate, only recovery to wait out.
+    // That is why the checks below assert unconditionally — a shortfall now is real loss,
+    // and a probe that never round-trips is a real wedge, not a transient fault.
 
-    // Faults just stopped; give the nodes a moment to start serving again.
-    let recovery_deadline = time::Instant::now() + time::Duration::from_secs(120);
+    // Faults stop instantly but recovery is not, so wait for every node to serve again.
+    let recovery_deadline = time::Instant::now() + time::Duration::from_secs(180);
     while time::Instant::now() < recovery_deadline && !all_healthy(&client, &metrics_urls).await {
         time::sleep(time::Duration::from_secs(3)).await;
     }
@@ -219,25 +220,32 @@ async fn main() {
         &json!({ "delivered": report.delivered, "delivered_total": report.delivered_total })
     );
 
-    // New id each attempt, pass if any round-trips. A permanent wedge fails them all.
-    if all_healthy(&client, &metrics_urls).await {
-        let deadline = time::Instant::now() + time::Duration::from_secs(45);
-        let mut progressed = false;
-        while !progressed && time::Instant::now() < deadline {
-            if let Some(probe) = claim(&client, &oracle_url).await {
-                if post_probe(&client, &source_url, probe).await {
-                    time::sleep(time::Duration::from_secs(1)).await;
-                    progressed = delivered_contains(&client, &oracle_url, probe).await;
+    // Liveness: a fresh write still round-trips. With faults stopped there is nothing to
+    // tolerate, so post one probe and poll it until it lands or the deadline. Claim and
+    // post retry until one sticks, since a node can briefly refuse a write while it is
+    // still recovering. A wedged node never delivers it and fails here. Runs
+    // unconditionally.
+    let deadline = time::Instant::now() + time::Duration::from_secs(45);
+    let mut probe = None;
+    let mut progressed = false;
+    while !progressed && time::Instant::now() < deadline {
+        if probe.is_none() {
+            if let Some(id) = claim(&client, &oracle_url).await {
+                if post_probe(&client, &source_url, id).await {
+                    probe = Some(id);
                 }
             }
-            if !progressed {
-                time::sleep(time::Duration::from_secs(2)).await;
-            }
         }
-        assert_always!(
-            progressed,
-            "post-recovery write makes progress",
-            &json!({ "acked": report.acked, "delivered": report.delivered })
-        );
+        if let Some(id) = probe {
+            progressed = delivered_contains(&client, &oracle_url, id).await;
+        }
+        if !progressed {
+            time::sleep(time::Duration::from_secs(2)).await;
+        }
     }
+    assert_always!(
+        progressed,
+        "post-recovery write makes progress",
+        &json!({ "acked": report.acked, "delivered": report.delivered })
+    );
 }

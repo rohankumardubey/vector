@@ -46,9 +46,15 @@ impl Cli {
             ]
         };
 
-        [tool.as_ref(), "--workspace", "--all-targets"]
-            .chain_args(feature_args)
-            .chain_args(pre_args)
+        [
+            tool.as_ref(),
+            "--workspace",
+            "--exclude",
+            "harness",
+            "--all-targets",
+        ]
+        .chain_args(feature_args)
+        .chain_args(pre_args)
     }
 
     pub fn exec(self) -> Result<()> {

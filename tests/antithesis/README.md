@@ -2,8 +2,8 @@
 
 This directory contains a sub-project to run Antithesis tests for Vector. The
 current focus is the `disk_v2` disk buffer: establishing that events Vector
-acknowledges are conserved rather than lost across crashes, restarts, config
-reloads, and injected faults, and probing whether an acknowledgement's claimed
+acknowledges are conserved rather than lost across crashes, restarts, and
+injected faults, and probing whether an acknowledgement's claimed
 durability actually holds under those conditions.
 
 ## Prerequisites

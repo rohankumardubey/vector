@@ -265,7 +265,7 @@ where
 
         // The wrapped id difference is always >= 1. A 0 makes the `- 1` below
         // underflow to ~2^64 and report a bogus record count.
-        #[cfg(feature = "antithesis")]
+        #[cfg(feature = "antithesis-disk-asserts")]
         {
             #![allow(clippy::disallowed_types)] // once_cell::Lazy
             antithesis_sdk::assert_always_greater_than_or_equal_to!(
@@ -307,7 +307,7 @@ where
         // Never decrement below zero. An underflow wraps the counter to a
         // near-maximum value, which makes the buffer look permanently full and
         // wedges the writer.
-        #[cfg(feature = "antithesis")]
+        #[cfg(feature = "antithesis-disk-asserts")]
         {
             #![allow(clippy::disallowed_types)] // once_cell::Lazy
             antithesis_sdk::assert_always_greater_than_or_equal_to!(
@@ -722,7 +722,7 @@ where
         // A non-zero sum means the buffer reopened on top of records left on disk by
         // a previous run, the reseed path whose value the reader later draws down and
         // the one most exposed to the buffer-size underflow.
-        #[cfg(feature = "antithesis")]
+        #[cfg(feature = "antithesis-disk-asserts")]
         {
             #![allow(clippy::disallowed_types)] // once_cell::Lazy
             antithesis_sdk::assert_sometimes!(
