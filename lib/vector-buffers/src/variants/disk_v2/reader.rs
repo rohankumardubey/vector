@@ -800,6 +800,17 @@ where
                             );
                             self.ledger.wait_for_writer().await;
                         } else {
+                            // The ledger names a data file that is gone while
+                            // the writer has moved on past it. A data file is
+                            // only unlinked after every record in it is acked,
+                            // so a missing file below the writer was fully
+                            // delivered. Advancing past it loses nothing.
+                            warn!(
+                                skipped_file_id = reader_file_id,
+                                writer_file_id,
+                                data_file_path = data_file_path.to_string_lossy().as_ref(),
+                                "Reader resume data file is missing; it was fully acknowledged before deletion. Advancing past it."
+                            );
                             self.ledger.increment_acked_reader_file_id();
                         }
                         continue;
@@ -864,8 +875,14 @@ where
         //
         // Once the reader/writer file IDs are identical, we fall back to the slow path.
         while self.ledger.get_current_reader_file_id() != self.ledger.get_current_writer_file_id() {
-            let data_file_path = self.ledger.get_current_reader_data_file_path();
             self.ensure_ready_for_read().await.context(IoSnafu)?;
+            // NOTE we intentionally read the resume path after
+            // `ensure_ready_for_read` to avoid crash-looping the buffer. If the
+            // ledger is out of date -- a hard-crash will cause its sync to be
+            // missed after dat files are unlinked -- we may be pointed to a
+            // missing dat file. Skipping is harmless as, by construction, the
+            // file was previously read entirely.
+            let data_file_path = self.ledger.get_current_reader_data_file_path();
             let data_file_mmap = self
                 .ledger
                 .filesystem()
